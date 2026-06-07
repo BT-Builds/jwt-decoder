@@ -1,0 +1,156 @@
+{
+  "info": {
+    "name": "jwt-decoder API",
+    "description": "BT Builds API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://jwt-decoder-delta.vercel.app",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "free-demo-key",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Decode Token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/decode",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "decode"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Validate Token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/validate",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "validate"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Generate Jwt",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/generate",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "generate"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"payload\": 0,\n  \"secret\": \"\",\n  \"expires_in\": 0\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -145,3 +145,6 @@ The /decode and /validate endpoints are rate-limited to 100 requests per minute 
 - 400 Bad Request: Invalid JWT format or decoding errors
 - 401 Unauthorized: Missing or invalid API key
 - 429 Too Many Requests: Rate limit exceeded
+
+## Postman
+[![Run in Postman](https://run.pstmn.io/button.svg)](https://raw.githubusercontent.com/BT-Builds/jwt-decoder/main/postman_collection.json)
