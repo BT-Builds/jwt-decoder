@@ -39,6 +39,10 @@ class TokenRequest(BaseModel):
     """Request model for JWT token."""
     token: str
 
+class BulkTokenRequest(BaseModel):
+    """Request model for bulk JWT tokens."""
+    tokens: list[str]
+
 class DecodedResponse(BaseModel):
     """Response model for decoded JWT."""
     header: dict
@@ -53,6 +57,30 @@ class ValidationResponse(BaseModel):
     not_expired: bool
     signature_valid: bool
     error: str | None = None
+
+class BulkDecodeResult(BaseModel):
+    """Result for a single item in bulk decode."""
+    input: str
+    output: dict | None = None
+    error: str | None = None
+
+class BulkDecodeResponse(BaseModel):
+    """Response model for bulk decode."""
+    results: list[BulkDecodeResult]
+    total: int
+    successful: int
+
+class BulkValidateResult(BaseModel):
+    """Result for a single item in bulk validate."""
+    input: str
+    output: dict | None = None
+    error: str | None = None
+
+class BulkValidateResponse(BaseModel):
+    """Response model for bulk validate."""
+    results: list[BulkValidateResult]
+    total: int
+    successful: int
 
 def verify_api_key(
     credentials: HTTPAuthorizationCredentials = Security(security)
@@ -91,6 +119,96 @@ def decode_jwt_parts(token: str) -> tuple[dict, dict]:
     except Exception as e:
         raise ValueError(f"Invalid JWT format: {str(e)}")
 
+def _decode_single(token: str) -> dict:
+    """Internal helper to decode a JWT token and return dict result."""
+    try:
+        header, payload = decode_jwt_parts(token)
+        try:
+            signature = token.split(".")[2]
+            if not signature:
+                raise ValueError("Missing signature")
+            signature_valid = True
+            signature_error = None
+        except Exception as e:
+            signature_valid = False
+            signature_error = str(e)
+        
+        return {
+            "header": header,
+            "payload": payload,
+            "signature_valid": signature_valid,
+            "signature_error": signature_error
+        }
+    except Exception as e:
+        raise
+
+def _validate_single(token: str) -> dict:
+    """Internal helper to validate a JWT token and return dict result."""
+    well_formed = False
+    not_expired = False
+    signature_valid = False
+    error = None
+    
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            error = "Token must have exactly 3 parts (header.payload.signature)"
+            return {
+                "valid": False,
+                "well_formed": False,
+                "not_expired": False,
+                "signature_valid": False,
+                "error": error
+            }
+        
+        well_formed = True
+        header, payload = decode_jwt_parts(token)
+        
+        try:
+            if "exp" in payload:
+                exp_time = payload["exp"]
+                if exp_time > 9999999999:
+                    exp_time = exp_time / 1000
+                current_time = time.time()
+                not_expired = exp_time > current_time
+                if not not_expired:
+                    error = f"Token has expired (expired at {exp_time}, current time: {current_time})"
+            else:
+                not_expired = True
+        except Exception as e:
+            error = f"Error checking expiration: {str(e)}"
+            not_expired = False
+        
+        try:
+            signature = parts[2]
+            if len(signature) > 0:
+                signature_valid = True
+            else:
+                error = "Empty signature"
+                signature_valid = False
+        except Exception as e:
+            signature_valid = False
+            if error is None:
+                error = f"Signature validation error: {str(e)}"
+        
+        valid = well_formed and not_expired and signature_valid
+        
+        return {
+            "valid": valid,
+            "well_formed": well_formed,
+            "not_expired": not_expired,
+            "signature_valid": signature_valid,
+            "error": error
+        }
+    except Exception as e:
+        return {
+            "valid": False,
+            "well_formed": well_formed,
+            "not_expired": not_expired,
+            "signature_valid": signature_valid,
+            "error": f"Unexpected error: {str(e)}"
+        }
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint - no authentication required."""
@@ -107,33 +225,8 @@ async def decode_token(
     Decode a JWT token and return header and payload as JSON.
     Also validates signature if possible.
     """
-    token = token_request.token
-    
-    try:
-        header, payload = decode_jwt_parts(token)
-        
-        # Try signature verification (without key, just check format)
-        try:
-            # Basic signature validation - checks if signature part is valid base64
-            signature = token.split(".")[2]
-            if not signature:
-                raise ValueError("Missing signature")
-            signature_valid = True
-            signature_error = None
-        except Exception as e:
-            signature_valid = False
-            signature_error = str(e)
-        
-        return DecodedResponse(
-            header=header,
-            payload=payload,
-            signature_valid=signature_valid,
-            signature_error=signature_error
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to decode token: {str(e)}")
+    result = _decode_single(token_request.token)
+    return DecodedResponse(**result)
 
 @app.post("/validate", response_model=ValidationResponse)
 @limiter.limit("100/min")
@@ -145,90 +238,66 @@ async def validate_token(
     """
     Validate a JWT token - check if it's well-formed, not expired, and signature is valid.
     """
-    token = token_request.token
+    result = _validate_single(token_request.token)
+    return ValidationResponse(**result)
+
+@app.post("/bulk/decode", response_model=BulkDecodeResponse)
+@limiter.limit("30/min")
+async def bulk_decode(
+    request: Request,
+    bulk_request: BulkTokenRequest,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Decode multiple JWT tokens in bulk.
+    Accepts up to 1000 tokens and returns results for each.
+    """
+    tokens = bulk_request.tokens[:1000]
+    results = []
+    successful = 0
     
-    well_formed = False
-    not_expired = False
-    signature_valid = False
-    error = None
+    for token in tokens:
+        try:
+            result = _decode_single(token)
+            results.append(BulkDecodeResult(input=token, output=result, error=None))
+            successful += 1
+        except Exception as e:
+            results.append(BulkDecodeResult(input=token, output=None, error=str(e)))
     
-    try:
-        # Check if well-formed
-        parts = token.split(".")
-        if len(parts) != 3:
-            error = "Token must have exactly 3 parts (header.payload.signature)"
-            return ValidationResponse(
-                valid=False,
-                well_formed=False,
-                not_expired=False,
-                signature_valid=False,
-                error=error
-            )
-        
-        well_formed = True
-        header, payload = decode_jwt_parts(token)
-        
-        # Check expiration
+    return BulkDecodeResponse(
+        results=results,
+        total=len(tokens),
+        successful=successful
+    )
+
+@app.post("/bulk/validate", response_model=BulkValidateResponse)
+@limiter.limit("30/min")
+async def bulk_validate(
+    request: Request,
+    bulk_request: BulkTokenRequest,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Validate multiple JWT tokens in bulk.
+    Accepts up to 1000 tokens and returns validation results for each.
+    """
+    tokens = bulk_request.tokens[:1000]
+    results = []
+    successful = 0
+    
+    for token in tokens:
         try:
-            if "exp" in payload:
-                exp_time = payload["exp"]
-                # Handle both seconds and milliseconds timestamps
-                if exp_time > 9999999999:  # Likely milliseconds
-                    exp_time = exp_time / 1000
-                current_time = time.time()
-                not_expired = exp_time > current_time
-                if not not_expired:
-                    error = f"Token has expired (expired at {exp_time}, current time: {current_time})"
-            else:
-                not_expired = True  # No expiration claim, consider it not expired
+            result = _validate_single(token)
+            results.append(BulkValidateResult(input=token, output=result, error=None))
+            successful += 1
         except Exception as e:
-            error = f"Error checking expiration: {str(e)}"
-            not_expired = False
-        
-        # Check signature - basic format validation
-        try:
-            signature = parts[2]
-            if len(signature) > 0:
-                signature_valid = True
-            else:
-                error = "Empty signature"
-                signature_valid = False
-        except Exception as e:
-            signature_valid = False
-            if error is None:
-                error = f"Signature validation error: {str(e)}"
-        
-        # Overall validity
-        valid = well_formed and not_expired and signature_valid
-        
-        if valid and error is None:
-            error = None
-        
-        return ValidationResponse(
-            valid=valid,
-            well_formed=well_formed,
-            not_expired=not_expired,
-            signature_valid=signature_valid,
-            error=error
-        )
-    except ValueError as e:
-        error = str(e)
-        return ValidationResponse(
-            valid=False,
-            well_formed=well_formed,
-            not_expired=not_expired,
-            signature_valid=signature_valid,
-            error=error
-        )
-    except Exception as e:
-        error = f"Unexpected error: {str(e)}"
-        return ValidationResponse(
-            valid=False,
-            well_formed=well_formed,
-            not_expired=not_expired,
-            signature_valid=signature_valid,
-            error=error
-        )
+            results.append(BulkValidateResult(input=token, output=None, error=str(e)))
+    
+    return BulkValidateResponse(
+        results=results,
+        total=len(tokens),
+        successful=successful
+    )
 
 # Handler for Vercel serverless deployment
 handler = Mangum(app)
