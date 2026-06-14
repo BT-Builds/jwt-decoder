@@ -117,7 +117,7 @@
       }
     },
     {
-      "name": "Generate Jwt",
+      "name": "Bulk Decode",
       "request": {
         "method": "POST",
         "header": [
@@ -133,17 +133,55 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/generate",
+          "raw": "{{base_url}}/bulk/decode",
           "host": [
             "{{base_url}}"
           ],
           "path": [
-            "generate"
+            "bulk",
+            "decode"
           ]
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"payload\": 0,\n  \"secret\": \"\",\n  \"expires_in\": 0\n}",
+          "raw": "{\n  \"tokens\": 0\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Bulk Validate",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/bulk/validate",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "bulk",
+            "validate"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tokens\": 0\n}",
           "options": {
             "raw": {
               "language": "json"
